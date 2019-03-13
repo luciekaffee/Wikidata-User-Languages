@@ -43,7 +43,7 @@ def create_db_data_entry(revision):
 
 
 item_id = ''
-with gzip.open('wikidatawiki-20180920-stub-meta-history.xml.gz', 'rb') as file:
+with gzip.open('wikidatawiki-20190302-stub-meta-history.xml.gz', 'rb') as file:
     revision = {}
     for l in file:
         if '<title>Q' in l:

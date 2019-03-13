@@ -1,4 +1,4 @@
-from pymongo import MongoClient
+import psycopg2
 import json
 import numpy
 from dateutil.parser import parse
@@ -9,25 +9,36 @@ from dateutil.parser import parse
 # For registered, anonymous and bots
 # And which languages the three groups edit
 class LanguageNumbers():
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, cursor, connection):
+        self.cursor = cursor
+        self.connection = connection
 
     # Query the DB for editors and the languages they edited (not unique! All languages edited from all edits)
-    # @return dict{editor: [languages (possibly duplicated)]} --> for unique use '$addToSet' instead of '$push'
-    # db.revision.aggregate([{$group: {_id: "$username", langs: {$push: "$language"}}}], {allowDiskUse:true})
-    def _get_editors_and_languages(self, col):
+    # @return dict{editor: [languages (possibly duplicated)]}
+    # SELECT username, array_agg(language) FROM registered GROUP BY username;
+    def _get_editors_and_languages(self, table):
         editors_languages = {}
-        query = [{'$group': {'_id': "$username", 'langs': {'$push': "$language"}}}]
-        cur = self.db[col].aggregate(query, allowDiskUse=True)
-        errorcounter = 0
-        try:
-            for doc in cur:
-                editors_languages[doc['_id']] = doc['langs']
-        except:
-            errorcounter += 1
-        print 'errorcounter: ' + str(errorcounter)
+        query = """SELECT username, array_agg(language) FROM %s GROUP BY username;""" %(table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
+
+        for r in rows:
+            editors_languages[r[0]] = r[1]
         print 'finished DB request'
         return editors_languages
+
+    def _get_editors_and_languages_unique(self, table):
+        editors_languages_uni = {}
+        query = """SELECT username, array_agg(DISTINCT language) FROM %s GROUP BY username;""" %(table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
+
+        for r in rows:
+            editors_languages_uni[r[0]] = r[1]
+        print 'finished DB request'
+        return editors_languages_uni
 
     # get languages by editors based on editors_languages to avoid another DB request
     # @return dict{language: int_nr_of_editors}
@@ -58,6 +69,7 @@ class LanguageNumbers():
 
     # Number of languages per editor
     # @return list [average, median, max, min] number of languages per editor
+    # SELECT username, count(DISTINCT language) FROM registered GROUP BY username;
     def languages_per_editor(self, editors_languages):
         print 'Number of editors ' + str(len(editors_languages.keys()))
         languages = []
@@ -104,9 +116,10 @@ class LanguageNumbers():
     # @return dict ['edit_count':[media, avg, max, min], languages_per_editor': [media, avg, max, min],
     # 'editors_per_language': [media, avg, max, min],
     # 'language_ranking_by_edits': [sorted_list_languages], 'language_ranking_by_editors': [sorted_list_languages]]
-    def run(self, db_field):
+    def run(self, table):
         results = {}
-        editors_languages = self._get_editors_and_languages(db_field)
+        editors_languages = self._get_editors_and_languages(table)
+        #editors_languages_uni = self._get_editors_and_languages_unique(table)
         languages_editors = self._get_languages_by_nr_editors(editors_languages)
         results['edit_count'] = self.get_edit_count(editors_languages)
         results['languages_per_editor'] = self.languages_per_editor(editors_languages)
@@ -117,44 +130,48 @@ class LanguageNumbers():
 
 # Class to find whether the edits of languages were done in bulge per language
 # Or mixed per language (kind of a timeline)
-# db.revision.aggregate([{$group: {_id: {"$ifNull": [ "$username", "$ip" ]},
-# data: {$push: {language: "$language", time: "$timestamp"}}}}], {allowDiskUse:true})
 class SequentialEditing():
-    def __init__(self, db, minEdits):
-        self.db = db
+    def __init__(self, cursor, connection, minEdits):
+        self.cursor = cursor
+        self.connection = connection
         self.minEdits = minEdits
 
     # get the data for languages and timestamps for all editors
     # @return dict {editor:{timestamp: language}}
-    def _get_editor_data(self, col):
+    def _get_editor_data(self, table):
         editor_data = {}
         errorcount = 0
-        query = [{'$group': {'_id': {"$ifNull": ["$username", "$ip"]}, 'data': {'$push': {'language': "$language", 'time': "$timestamp"}}}}]
-        cur = self.db[col].aggregate(query, allowDiskUse=True)
-        try:
-            for doc in cur:
-                edits = {}
-                for d in doc['data']:
-                    edits[parse(d['time'])] = d['language']
-                if edits > self.minEdits:
-                    editor_data[doc['_id']] = sorted(edits.iteritems(), key=lambda (k, v): (v, k))
-        except:
-            errorcount += 1
-        print 'errorcount se editing ' + str(errorcount)
+        query = "SELECT username, json_agg(json_build_array(timestamp, language)) AS users FROM %s GROUP BY username;" %(table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
+        for r in rows:
+            if not len(r[1]) > self.minEdits:
+                continue
+            timedict = {}
+            for k, v in r[1]:
+                timedict[k] = v
+            editor_data[r[0]] = timedict
+        print 'number of editors: ' + str(len(editor_data.keys()))
         return editor_data
 
-    def run(self, db_field):
-        editor_data = self._get_editor_data(db_field)
+    def run(self, table):
+        editor_data = self._get_editor_data(table)
         return editor_data
 
 
 # Find overlaps between languages that editors edit (e.g. German is close to English, French to Spanish etc)
 class LanguageOverlap:
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, cursor, connection):
+        self.cursor = cursor
+        self.connection = connection
+
+    def _get_data(self, table):
+
 
 # How fast is a label changed? Difference between registered, anonymous, bots
 class LabelLifetime:
-    def __init__(self, db):
-        self.db = db
+    def __init__(self, cursor, connection):
+        self.cursor = cursor
+        self.connection = connection
 
