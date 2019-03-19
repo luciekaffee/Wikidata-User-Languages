@@ -2,6 +2,7 @@ import psycopg2
 import json
 import numpy
 from dateutil.parser import parse
+import itertools
 
 
 # Class to describe how many languages a user edits in average
@@ -131,14 +132,13 @@ class LanguageNumbers():
 # Class to find whether the edits of languages were done in bulge per language
 # Or mixed per language (kind of a timeline)
 class SequentialEditing():
-    def __init__(self, cursor, connection, minEdits):
+    def __init__(self, cursor, connection):
         self.cursor = cursor
         self.connection = connection
-        self.minEdits = minEdits
 
     # get the data for languages and timestamps for all editors
     # @return dict {editor:{timestamp: language}}
-    def _get_editor_data(self, table):
+    def _get_editor_data_language(self, table, min_edits):
         editor_data = {}
         errorcount = 0
         query = "SELECT username, json_agg(json_build_array(timestamp, language)) AS users FROM %s GROUP BY username;" %(table)
@@ -146,17 +146,60 @@ class SequentialEditing():
         self.connection.commit()
         rows = self.cursor.fetchall()
         for r in rows:
-            if not len(r[1]) > self.minEdits:
+            if not len(r[1]) > min_edits:
                 continue
             timedict = {}
             for k, v in r[1]:
                 timedict[k] = v
             editor_data[r[0]] = timedict
-        print 'number of editors: ' + str(len(editor_data.keys()))
+        print 'number of editors for sequential metric: ' + str(len(editor_data.keys()))
         return editor_data
 
-    def run(self, table):
-        editor_data = self._get_editor_data(table)
+    def _get_editor_data_items(self, table, min_edits):
+        editor_data = {}
+        errorcount = 0
+        query = "SELECT username, json_agg(json_build_array(timestamp, item_id)) AS users FROM %s GROUP BY username;" %(table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
+        for r in rows:
+            if not len(r[1]) > min_edits:
+                continue
+            timedict = {}
+            for k, v in r[1]:
+                timedict[k] = v
+            editor_data[r[0]] = timedict
+        print 'number of editors for sequential metric: ' + str(len(editor_data.keys()))
+        return editor_data
+
+    # @todo: normalize based on the number of languages/timestamps
+    def calculate_jumps(self, editor_data):
+        jumps = []
+        for k, v in editor_data.iteritems():
+            curr = ''
+            counter = 0
+            langs = set(v.values())
+            for time in sorted(v.keys()):
+                if v[time] == curr:
+                    continue
+                else:
+                    counter += 1
+                    curr = v[time]
+            jumps.append(counter/len(langs))
+        median = numpy.median(jumps)
+        avg = numpy.average(jumps)
+        maxv = max(jumps)
+        minv = min(jumps)
+        print 'JUMPS: ' + str(median) + ' average: ' + str(avg) + 'max/min: ' + str(maxv) + '/' + str(minv)
+        return [median, avg, maxv, minv]
+
+    def run(self, table, min_edits):
+        print 'JUMPS IN LANGUAGES'
+        editor_data = self._get_editor_data_language(table, min_edits)
+        self.calculate_jumps(editor_data)
+        print 'JUMPS IN ENTITIES'
+        editor_data_entities = self._get_editor_data_items(table, min_edits)
+        self.calculate_jumps(editor_data_entities)
         return editor_data
 
 
@@ -166,8 +209,69 @@ class LanguageOverlap:
         self.cursor = cursor
         self.connection = connection
 
+    # @return dict{(tuple language pair): int co-occurence}
     def _get_data(self, table):
+        language_overlap = {}
+        query = """SELECT array_agg(DISTINCT language) FROM %s GROUP BY username;""" % (table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
 
+        for r in rows:
+            combi = list(itertools.combinations(r[0], 2))
+            for c in combi:
+                if c not in language_overlap:
+                    language_overlap[c] = 1
+                else:
+                    language_overlap[c] += 1
+        return language_overlap
+
+    # limit to values over the mean
+    # @todo set the mean limit properly
+    def limit(self, language_overlap, language_ranking=None):
+        language_overlap_limited = {}
+        mean = numpy.mean(language_overlap.values())
+        for (l1, l2), v in language_overlap.iteritems():
+            if v > (mean * 2):
+                language_overlap_limited[(l1, l2)] = v
+        if language_ranking:
+            language_overlap_limited_rank = {}
+            top_50 = sorted(language_ranking, key=language_ranking.get, reverse=True)[:50]
+            for (l1, l2), v in language_overlap_limited.iteritems():
+                if l1 in top_50 and l2 in top_50:
+                    language_overlap_limited_rank[(l1, l2)] = v
+            language_overlap_limited = language_overlap_limited_rank
+        return language_overlap_limited
+
+    def run(self, table, language_ranking=None):
+        language_overlap = self._get_data(table)
+        language_overlap_limited = self.limit(language_overlap, language_ranking)
+        print 'number combinations: ' + str(len(language_overlap_limited))
+        return language_overlap_limited
+
+
+class EditTimeline:
+    def __init__(self, cursor, connection):
+        self.cursor = cursor
+        self.connection = connection
+
+    def get_time_data(self, table):
+        time_data = {}
+        query = """SELECT date_trunc('month', timestamp), COUNT(username) FROM %s GROUP BY date_trunc('month', timestamp);""" % (table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
+        for r in rows:
+            time_data[r[0].strftime("%m/%Y")] = r[1]
+        return time_data
+
+    def run(self, table):
+        return self.get_time_data(table)
+
+class MonoVsMultilingual:
+    def __init__(self, cursor, connection):
+        self.cursor = cursor
+        self.connection = connection
 
 # How fast is a label changed? Difference between registered, anonymous, bots
 class LabelLifetime:

@@ -27,45 +27,75 @@ def close_db(cursor, connection):
         connection.close()
         print("PostgreSQL connection is closed")
 
+
+def remap_keys(mapping):
+    return [{'key': k, 'value': v} for k, v in mapping.iteritems()]
+
 connection, cursor = connect_db()
 
 ln = LanguageNumbers(connection, cursor)
-se = SequentialEditing(connection, cursor, 1000)
+se = SequentialEditing(connection, cursor)
+lo = LanguageOverlap(connection, cursor)
+et = EditTimeline(connection, cursor)
 
 
-print 'for registered users'
+print '--------------------for registered2 users--------------------'
 
-lnresult = ln.run('registered')
-with open('registered-ln-result.json', 'w') as outfile:
+lnresult = ln.run('registered2')
+with open('registered2-ln-result.json', 'w') as outfile:
     json.dump(lnresult, outfile)
 
-#lng = LanguageNumbersGraphs(languagenumberresult)
-#lng.ranking_graph()
-
-
-seresult = se.run('registered')
-with open('registered-se-result.json', 'w') as outfile:
+seresult = se.run('registered2', 500)
+with open('registered2-se-result.json', 'w') as outfile:
     outfile.write(json.dumps(seresult, indent=4, sort_keys=True, default=str))
 
-print 'for anonymous'
+loresult = lo.run('registered2', lnresult['language_ranking_by_edits'])
+loresult = remap_keys(loresult)
+with open('registered2-lo-result.json', 'w') as outfile:
+    outfile.write(json.dumps(loresult, indent=4, sort_keys=True, default=str))
 
-lnresult = ln.run('anonymous')
-with open('anonymous-ln-result.json', 'w') as outfile:
+etresult = et.run('registered2')
+with open('registered2-et-result.json', 'w') as outfile:
+    outfile.write(json.dumps(etresult, indent=4, sort_keys=True, default=str))
+
+
+print '--------------------for anonymous2--------------------'
+
+lnresult = ln.run('anonymous2')
+with open('anonymous2-ln-result.json', 'w') as outfile:
     json.dump(lnresult, outfile)
 
-seresult = se.run('anonymous')
-with open('anonymous-se-result.json', 'w') as outfile:
+seresult = se.run('anonymous2', 100)
+with open('anonymous2-se-result.json', 'w') as outfile:
     outfile.write(json.dumps(seresult, indent=4, sort_keys=True, default=str))
 
+loresult = lo.run('anonymous2', lnresult['language_ranking_by_edits'])
+loresult = remap_keys(loresult)
+with open('anonymous2-lo-result.json', 'w') as outfile:
+    outfile.write(json.dumps(loresult, indent=4, sort_keys=True, default=str))
 
-print 'for bots'
+etresult = et.run('anonymous2')
+with open('anonymous2-et-result.json', 'w') as outfile:
+    outfile.write(json.dumps(etresult, indent=4, sort_keys=True, default=str))
 
-lnresult = ln.run('bots')
-with open('bots-ln-result.json', 'w') as outfile:
+
+print '--------------------for bots2--------------------'
+
+lnresult = ln.run('bots2')
+with open('bots2-ln-result.json', 'w') as outfile:
     json.dump(lnresult, outfile)
 
-seresult = se.run('bots')
-with open('bots-se-result.json', 'w') as outfile:
+seresult = se.run('bots2', 500)
+with open('bots2-se-result.json', 'w') as outfile:
     outfile.write(json.dumps(seresult, indent=4, sort_keys=True, default=str))
+
+loresult = lo.run('bots2', lnresult['language_ranking_by_edits'])
+loresult = remap_keys(loresult)
+with open('bots2-lo-result.json', 'w') as outfile:
+    outfile.write(json.dumps(loresult, indent=4, sort_keys=True, default=str))
+
+etresult = et.run('bots2')
+with open('bots2-et-result.json', 'w') as outfile:
+    outfile.write(json.dumps(etresult, indent=4, sort_keys=True, default=str))
 
 close_db(cursor, connection)

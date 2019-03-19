@@ -34,31 +34,48 @@ def close_db(cursor, connection):
         print("PostgreSQL connection is closed")
 
 
-def create_db_data_entry(cursor, connection, revision):
+errorlog = open('errorlog.csv', 'a+')
+
+def create_db_data_entry(cur, conn, revision):
     query = ''
-    if 'username' not in revision and 'ip' in revision:
-        print 'anonymous'
-        query = """INSERT INTO anonymous(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
-             VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s);""" % (revision['ip'], revision['comment'].replace("'", '"'),
-                                    revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
-                                    revision['parentid'], revision['item_id'], revision['model'], revision['id'])
-    elif 'username' not in revision and 'ip' not in revision:
+    if 'sha1' not in revision:
+        revision['sha1'] = 'x'
+    try:
+        if 'username' not in revision and 'ip' in revision:
+            print 'anonymous'
+            query = """INSERT INTO anonymous(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
+                 VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s)""" % (revision['ip'], revision['comment'].replace("'", '"'),
+                                        revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
+                                        revision['parentid'], revision['item_id'], revision['model'], revision['id'])
+            #if id in revision:
+            #    query += """WHERE NOT EXISTS ( SELECT id FROM anonymous WHERE id = %s);""" % (revision[id])
+        elif 'username' not in revision and 'ip' not in revision or 'language' not in revision:
+            return
+        elif revision['username'] in bots or revision['username'].lower().startswith('bot') or revision['username'].lower().endswith('bot'):
+            print 'bots'
+            query = """INSERT INTO bots(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
+                VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s)""" % (revision['username'].replace("'", '"'), revision['comment'].replace("'", '"'),
+                                        revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
+                                        revision['parentid'], revision['item_id'], revision['model'], revision['id'])
+            #if id in revision:
+            #    query += """WHERE NOT EXISTS ( SELECT id FROM bots WHERE id = %s);""" % (revision[id])
+        else:
+            print 'registered'
+            query = """INSERT INTO registered(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
+                VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s)""" % (revision['username'].replace("'", '"'), revision['comment'].replace("'", '"'),
+                                        revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
+                                        revision['parentid'], revision['item_id'], revision['model'], revision['id'])
+            #if id in revision:
+            #    query += """WHERE NOT EXISTS ( SELECT id FROM registered WHERE id = %s);""" % (revision[id])
+    except:
+        errorlog.write(revision['itemid'], revision['id'])
         return
-    elif revision['username'] in bots or revision['username'].lower().startswith('bot') or revision['username'].lower().endswith('bot'):
-        print 'bots'
-        query = """INSERT INTO bots(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
-            VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s);""" % (revision['username'].replace("'", '"'), revision['comment'].replace("'", '"'),
-                                    revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
-                                    revision['parentid'], revision['item_id'], revision['model'], revision['id'])
-    else:
-        print 'registered'
-        query = """INSERT INTO registered(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
-            VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s);""" % (revision['username'].replace("'", '"'), revision['comment'].replace("'", '"'),
-                                    revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
-                                    revision['parentid'], revision['item_id'], revision['model'], revision['id'])
     if query:
-        cursor.execute(query)
-        connection.commit()
+        try:
+            cur.execute(query)
+            conn.commit()
+        except:
+            errorlog.write(revision['itemid'], revision['id'])
 
 
 def get_lang(comment):
