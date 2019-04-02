@@ -173,19 +173,20 @@ class SequentialEditing():
         return editor_data
 
     # @todo: normalize based on the number of languages/timestamps
-    def calculate_jumps(self, editor_data):
+    def calculate_jumps(self, editor_data, edits=False):
         jumps = []
         for k, v in editor_data.iteritems():
             curr = ''
             counter = 0
             langs = set(v.values())
+            total = len(v)
             for time in sorted(v.keys()):
                 if v[time] == curr:
                     continue
                 else:
                     counter += 1
                     curr = v[time]
-            jumps.append(counter/len(langs))
+            jumps.append(counter/float(total))
         median = numpy.median(jumps)
         avg = numpy.average(jumps)
         maxv = max(jumps)
@@ -199,7 +200,7 @@ class SequentialEditing():
         self.calculate_jumps(editor_data)
         print 'JUMPS IN ENTITIES'
         editor_data_entities = self._get_editor_data_items(table, min_edits)
-        self.calculate_jumps(editor_data_entities)
+        self.calculate_jumps(editor_data_entities, edits=True)
         return editor_data
 
 
@@ -226,13 +227,34 @@ class LanguageOverlap:
                     language_overlap[c] += 1
         return language_overlap
 
+    # boxplot
+    # correlation between the languages that are used together and the same language family
+    def correlation_overlap_language_family(self, language_overlap):
+        family = {}
+        family_data = {}
+        with open('iso_639-1.json') as infile:
+            family = json.load(infile)
+        for k,v in family.iteritems():
+            family_data[k + ' '] = v['family']
+        same_family_counter = []
+        different_family_counter = []
+        for (l1, l2), v in language_overlap.iteritems():
+            if l1 in family_data and l2 in family_data:
+                if family_data[l1] == family_data[l2]:
+                    same_family_counter.append(v)
+                else:
+                    different_family_counter.append(v)
+        return same_family_counter, different_family_counter
+
+
+
     # limit to values over the mean
     # @todo set the mean limit properly
     def limit(self, language_overlap, language_ranking=None):
         language_overlap_limited = {}
         mean = numpy.mean(language_overlap.values())
         for (l1, l2), v in language_overlap.iteritems():
-            if v > (mean * 2):
+            if v > (mean * 5):
                 language_overlap_limited[(l1, l2)] = v
         if language_ranking:
             language_overlap_limited_rank = {}
@@ -247,7 +269,8 @@ class LanguageOverlap:
         language_overlap = self._get_data(table)
         language_overlap_limited = self.limit(language_overlap, language_ranking)
         print 'number combinations: ' + str(len(language_overlap_limited))
-        return language_overlap_limited
+        same_family_counter, different_family_counter = self.correlation_overlap_language_family(language_overlap)
+        return [language_overlap_limited, same_family_counter, different_family_counter]
 
 
 class EditTimeline:
@@ -268,14 +291,27 @@ class EditTimeline:
     def run(self, table):
         return self.get_time_data(table)
 
+# Query: SELECT username, COUNT(DISTINCT language), COUNT(id) FROM registered GROUP BY username LIMIT 10;
 class MonoVsMultilingual:
     def __init__(self, cursor, connection):
         self.cursor = cursor
         self.connection = connection
 
+    def get_edit_data(self, table):
+        data = {}
+        query = """SELECT username, COUNT(DISTINCT language), COUNT(id) FROM %s GROUP BY username;""" % (table)
+        self.cursor.execute(query)
+        self.connection.commit()
+        rows = self.cursor.fetchall()
+        for r in rows:
+            data[r[0]] = [r[1], r[2]]
+        return data
+
+
+
 # How fast is a label changed? Difference between registered, anonymous, bots
-class LabelLifetime:
-    def __init__(self, cursor, connection):
-        self.cursor = cursor
-        self.connection = connection
+#class LabelLifetime:
+#    def __init__(self, cursor, connection):
+#        self.cursor = cursor
+#        self.connection = connection
 

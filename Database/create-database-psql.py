@@ -5,13 +5,15 @@ from dateutil.parser import parse
 
 #psql frimelle -h 127.0.0.1 -d wikibabeldb
 
+#SELECT COUNT(*) FROM (SELECT username, COUNT(DISTINCT language) as counter FROM bots2 WHERE COUNT(DISTINCT language^C> 5 GROUP BY username) AS countall;
 
-bots = []
 
-# List based on https://www.wikidata.org/wiki/Wikidata:List_of_bots
+bots2 = []
+
+# List based on https://www.wikidata.org/wiki/Wikidata:List_of_bots2
 with open('bots/bots-list.csv') as data_file:
     for line in data_file:
-        bots.append(line.strip())
+        bots2.append(line.strip())
 
 
 def connect_db():
@@ -33,7 +35,6 @@ def close_db(cursor, connection):
         connection.close()
         print("PostgreSQL connection is closed")
 
-
 errorlog = open('errorlog.csv', 'a+')
 
 def create_db_data_entry(cur, conn, revision):
@@ -42,40 +43,42 @@ def create_db_data_entry(cur, conn, revision):
         revision['sha1'] = 'x'
     try:
         if 'username' not in revision and 'ip' in revision:
-            print 'anonymous'
-            query = """INSERT INTO anonymous(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
+            print 'anonymous2'
+            query = """INSERT INTO anonymous2(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
                  VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s)""" % (revision['ip'], revision['comment'].replace("'", '"'),
                                         revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
                                         revision['parentid'], revision['item_id'], revision['model'], revision['id'])
             #if id in revision:
-            #    query += """WHERE NOT EXISTS ( SELECT id FROM anonymous WHERE id = %s);""" % (revision[id])
+            #    query += """WHERE NOT EXISTS ( SELECT id FROM anonymous2 WHERE id = %s);""" % (revision[id])
         elif 'username' not in revision and 'ip' not in revision or 'language' not in revision:
             return
-        elif revision['username'] in bots or revision['username'].lower().startswith('bot') or revision['username'].lower().endswith('bot'):
-            print 'bots'
-            query = """INSERT INTO bots(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
+        elif revision['username'] in bots2 or revision['username'].lower().startswith('bot') or revision['username'].lower().endswith('bot'):
+            print 'bots2'
+            query = """INSERT INTO bots2(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
                 VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s)""" % (revision['username'].replace("'", '"'), revision['comment'].replace("'", '"'),
                                         revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
                                         revision['parentid'], revision['item_id'], revision['model'], revision['id'])
             #if id in revision:
-            #    query += """WHERE NOT EXISTS ( SELECT id FROM bots WHERE id = %s);""" % (revision[id])
+            #    query += """WHERE NOT EXISTS ( SELECT id FROM bots2 WHERE id = %s);""" % (revision[id])
         else:
-            print 'registered'
-            query = """INSERT INTO registered(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
+            print 'registered2'
+            query = """INSERT INTO registered2(username, comment, sha1, language, format, timestamp, parentid, item_id, model, id)
                 VALUES('%s', '%s', '%s', '%s', '%s', '%s', %s, '%s', '%s', %s)""" % (revision['username'].replace("'", '"'), revision['comment'].replace("'", '"'),
                                         revision['sha1'], revision['language'], revision['format'], parse(revision['timestamp']),
                                         revision['parentid'], revision['item_id'], revision['model'], revision['id'])
             #if id in revision:
-            #    query += """WHERE NOT EXISTS ( SELECT id FROM registered WHERE id = %s);""" % (revision[id])
+            #    query += """WHERE NOT EXISTS ( SELECT id FROM registered2 WHERE id = %s);""" % (revision[id])
     except:
-        errorlog.write(revision['itemid'], revision['id'])
-        return
+        if 'itemid' in revision and 'id' in revision:
+            errorlog.write(revision['itemid'], revision['id'])
+            return
     if query:
         try:
             cur.execute(query)
             conn.commit()
         except:
-            errorlog.write(revision['itemid'], revision['id'])
+            if 'itemid' in revision and 'id' in revision:
+                errorlog.write(revision['itemid'], revision['id'])
 
 
 def get_lang(comment):
