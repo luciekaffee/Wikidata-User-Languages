@@ -213,7 +213,7 @@ class LanguageOverlap:
     # @return dict{(tuple language pair): int co-occurence}
     def _get_data(self, table):
         language_overlap = {}
-        query = """SELECT array_agg(DISTINCT language) FROM %s GROUP BY username;""" % (table)
+        query = """SELECT array_agg(language) FROM %s GROUP BY username;""" % (table)
         self.cursor.execute(query)
         self.connection.commit()
         rows = self.cursor.fetchall()
@@ -221,6 +221,8 @@ class LanguageOverlap:
         for r in rows:
             combi = list(itertools.combinations(r[0], 2))
             for c in combi:
+                if c[0] == c[1]:
+                    continue
                 if c not in language_overlap:
                     language_overlap[c] = 1
                 else:
