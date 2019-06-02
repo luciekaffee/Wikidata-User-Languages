@@ -21,6 +21,3 @@ First, we created a MongoDB database, the datbase is called *wikibabeldb*, it co
 ## Metrics
 To reproducce the analysis, the code can be found in the Metrics folder. *run.py* runs the whole pipeline from data analysis to graph creation. *metricspsql.py* contains all classes to analyse the data, *graph.py* contains the classes for the creation of graphs. 
 Again, *metrics.py* is written for the MongoDB setup, but due to limitations of MongoDB is not used by us but might be useful for future work. 
-
-## prediction
-The folder *prediction* contains work on prediting user languages of Wikidata editors, which is not connected to the work above. 
